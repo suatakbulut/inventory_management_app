@@ -213,8 +213,8 @@ class InventoryApp:
 
         # Check if there is enough quantity in the inventory
         cursor.execute('''
-            SELECT total_quantity, average_price FROM inventory WHERE item_no=?
-        ''', (item_no,))
+            SELECT total_quantity, average_price FROM inventory WHERE item_no=? AND item_name=?
+        ''', (item_no, item_name))
         result = cursor.fetchone()
         if result and result[0] >= quantity:
             average_price_at_shipment = result[1]
@@ -236,8 +236,13 @@ class InventoryApp:
             self.entry_item_name_outgoing.delete(0, tk.END)
             self.entry_quantity_outgoing.delete(0, tk.END)
         else:
-            messagebox.showwarning(
-                "Insufficient Quantity", "Not enough quantity in the inventory.")
+            if result:
+                available_quantity = result[0]
+                messagebox.showwarning(
+                    "Insufficient Quantity", f"Not enough quantity in the inventory. Available quantity for ({item_no}, {item_name}): {available_quantity}.")
+            else:
+                messagebox.showwarning(
+                    "Item Not Found", f"Item ({item_no}, {item_name}) not found in the inventory.")
 
     def update_inventory_incoming(self, item_no, item_name, quantity, per_unit_price):
         # Check if the item already exists in the inventory
@@ -362,21 +367,25 @@ class InventoryApp:
         self.shipping_personnel_var_report = StringVar(self.reporting_tab)
         self.shipping_personnel_var_report.set("All")  # Default value
         shipping_personnel_options_report = ["All", "Bekir", "Celal Fatih"]
-        shipping_personnel_menu_report = tk.OptionMenu(self.reporting_tab, self.shipping_personnel_var_report, *shipping_personnel_options_report)
+        shipping_personnel_menu_report = tk.OptionMenu(
+            self.reporting_tab, self.shipping_personnel_var_report, *shipping_personnel_options_report)
 
         # Dropdown for Item No
         self.item_no_var_report = StringVar(self.reporting_tab)
         self.item_no_var_report.set("All")  # Default value
         item_no_options_report = ["All"] + self.get_all_item_nos()
-        item_no_menu_report = tk.OptionMenu(self.reporting_tab, self.item_no_var_report, *item_no_options_report)
+        item_no_menu_report = tk.OptionMenu(
+            self.reporting_tab, self.item_no_var_report, *item_no_options_report)
 
         # Dropdown for Item Name
         self.item_name_var_report = StringVar(self.reporting_tab)
         self.item_name_var_report.set("All")  # Default value
         item_name_options_report = ["All"] + self.get_all_item_names()
-        item_name_menu_report = tk.OptionMenu(self.reporting_tab, self.item_name_var_report, *item_name_options_report)
+        item_name_menu_report = tk.OptionMenu(
+            self.reporting_tab, self.item_name_var_report, *item_name_options_report)
 
-        btn_generate_report = tk.Button(self.reporting_tab, text="Generate Report", command=self.generate_report)
+        btn_generate_report = tk.Button(
+            self.reporting_tab, text="Generate Report", command=self.generate_report)
 
         shipping_personnel_menu_report.grid(row=0, column=0, padx=10, pady=10)
         item_no_menu_report.grid(row=0, column=1, padx=10, pady=10)
@@ -384,7 +393,8 @@ class InventoryApp:
         btn_generate_report.grid(row=0, column=3, padx=10, pady=10)
 
         # Treeview for displaying the report
-        self.tree_report = ttk.Treeview(self.reporting_tab, columns=("Item No", "Item Name", "Total Quantity", "Total Cost"))
+        self.tree_report = ttk.Treeview(self.reporting_tab, columns=(
+            "Item No", "Item Name", "Total Quantity", "Total Cost"))
         self.tree_report.heading("#1", text="Item No")
         self.tree_report.heading("#2", text="Item Name")
         self.tree_report.heading("#3", text="Total Quantity")
@@ -396,7 +406,8 @@ class InventoryApp:
         for row in self.tree_report.get_children():
             self.tree_report.delete(row)
 
-        shipping_personnel = self.clean_input(self.shipping_personnel_var_report.get())
+        shipping_personnel = self.clean_input(
+            self.shipping_personnel_var_report.get())
         item_no = self.clean_input(self.item_no_var_report.get())
         item_name = self.clean_input(self.item_name_var_report.get())
 
@@ -416,7 +427,8 @@ class InventoryApp:
             where_conditions.append("os.item_name = ?")
             query_params.append(item_name)
 
-        where_clause = " AND ".join(where_conditions) if where_conditions else ""
+        where_clause = " AND ".join(
+            where_conditions) if where_conditions else ""
 
         query = f'''
             SELECT os.item_no, os.item_name, SUM(os.quantity) as total_quantity, SUM(os.quantity * os.average_price_at_shipment) as total_cost
@@ -430,7 +442,7 @@ class InventoryApp:
 
         for row in result:
             self.tree_report.insert("", "end", values=row)
-            
+
     def get_all_item_nos(self):
         cursor.execute('SELECT DISTINCT item_no FROM inventory')
         item_nos_inventory = [row[0] for row in cursor.fetchall()]
@@ -451,35 +463,6 @@ class InventoryApp:
         item_names = list(
             set(item_names_inventory + item_names_outgoing_shipments))
         return [item_name for item_name in item_names if item_name]
-
-    def display_report(self):
-        personnel = self.clean_input(self.shipping_personnel_var.get())
-        item_no = self.clean_input(self.item_no_var_report.get())
-        item_name = self.clean_input(self.item_name_var_report.get())
-
-        print("personnel", personnel, type(personnel))
-        print("item_no", item_no, type(item_no))
-        print("item_name", item_name, type(item_name))
-
-        query = '''
-            SELECT SUM(os.quantity * os.average_price_at_shipment) AS total_cost
-            FROM outgoing_shipments os
-            WHERE (? = 'ALL' OR os.shipping_personnel = ?)
-              AND (? = 'ALL' OR os.item_no = ?)
-              AND (? = 'ALL' OR os.item_name = ?)
-        '''
-
-        cursor.execute(query, (personnel, personnel, item_no, item_no, item_name, item_name))
-        result = cursor.fetchone()
-
-        if result and result[0] is not None:
-            total_cost = result[0]
-            self.result_text.delete(1.0, tk.END)  # Clear previous result
-            self.result_text.insert(tk.END, f"Total Cost: {total_cost}")
-        else:
-            self.result_text.delete(1.0, tk.END)
-            self.result_text.insert(
-                tk.END, "No data available for the selected criteria.")
 
 
 if __name__ == "__main__":
