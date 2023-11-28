@@ -233,6 +233,7 @@ class InventoryApp:
 
             # Clear entry fields
             self.entry_item_no_outgoing.delete(0, tk.END)
+            self.entry_item_name_outgoing.delete(0, tk.END)
             self.entry_quantity_outgoing.delete(0, tk.END)
         else:
             messagebox.showwarning(
