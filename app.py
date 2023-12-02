@@ -214,15 +214,14 @@ class InventoryApp:
     def create_inventory_tab(self):
         self.tree_inventory = ttk.Treeview(self.inventory_tab, columns=(
             "Store", "Item No", "Item Name", "Total Quantity", "Average Price", "Average Price After Tax"))
-        
-        
-        self.tree_inventory.column("#1", width=150, anchor="w") 
-        self.tree_inventory.column("#2", width=150, anchor="w") 
-        self.tree_inventory.column("#3", width=150, anchor="w") 
-        self.tree_inventory.column("#4", width=150, anchor="e") 
-        self.tree_inventory.column("#5", width=150, anchor="e") 
-        self.tree_inventory.column("#6", width=150, anchor="e") 
-        
+
+        self.tree_inventory.column("#1", width=150, anchor="w")
+        self.tree_inventory.column("#2", width=150, anchor="w")
+        self.tree_inventory.column("#3", width=150, anchor="w")
+        self.tree_inventory.column("#4", width=150, anchor="e")
+        self.tree_inventory.column("#5", width=150, anchor="e")
+        self.tree_inventory.column("#6", width=150, anchor="e")
+
         self.tree_inventory.heading("#1", text="Store")
         self.tree_inventory.heading("#2", text="Item No")
         self.tree_inventory.heading("#3", text="Item Name")
@@ -385,18 +384,115 @@ class InventoryApp:
         result = cursor.fetchall()
         for row in result:
             formatted_row = list(row)
-            formatted_row[3] = self.format_quantity(row[3])  # Format the quantity value
-            formatted_row[4] = self.format_price(row[4]) # Format the Average Price
-            formatted_row[5] = self.format_price(row[5])  # Format the Average Price After Tax
+            formatted_row[3] = self.format_quantity(
+                row[3])  # Format the quantity value
+            formatted_row[4] = self.format_price(
+                row[4])  # Format the Average Price
+            # Format the Average Price After Tax
+            formatted_row[5] = self.format_price(row[5])
             self.tree_inventory.insert("", "end", values=formatted_row)
 
     def format_quantity(self, value):
-            return f"{value:,}"
-    
+        return f"{value:,}"
+
     def format_price(self, value):
-            return "{:0,.2f}".format(value)
-    
+        return "{:0,.2f}".format(value)
+
+    def update_inventory_delete_incoming_entry(self, inventory_info, store, item_no, item_name, quantity, unit_price, tax_rate):
+        # Current inventory details
+        current_quantity = int(inventory_info[0])
+        inventory_price_before_tax = float(inventory_info[1])
+        inventory_price_after_tax = float(inventory_info[2])
+        current_total_cost_before_tax = current_quantity * inventory_price_before_tax
+        current_total_cost_after_tax = current_quantity * inventory_price_after_tax
+
+        # Detail of the selected entry
+        selected_entry_quantity = int(quantity)
+        selected_entry_price = float(unit_price)
+        selected_entry_tax_rate = float(tax_rate)
+        selected_entry_total_cost_before_tax = selected_entry_quantity * selected_entry_price
+        selected_entry_total_cost_after_tax = selected_entry_total_cost_before_tax + \
+            selected_entry_total_cost_before_tax * selected_entry_tax_rate
+
+        # Calculate the updated inventory information after deleting the incoming item
+        updated_quantity = current_quantity - selected_entry_quantity
+        updated_total_cost_before_tax = current_total_cost_before_tax - \
+            selected_entry_total_cost_before_tax
+        updated_total_cost_after_tax = current_total_cost_after_tax - \
+            selected_entry_total_cost_after_tax
+        updated_average_price_before_tax = updated_total_cost_before_tax / updated_quantity
+        updated_average_price_after_tax = updated_total_cost_after_tax / updated_quantity
+
+        # Update the inventory table with the new information
+        cursor.execute('''
+            UPDATE inventory
+            SET total_quantity = ?,
+                average_price_before_tax = ?,
+                average_price_after_tax = ?
+            WHERE store = ? AND item_no = ? AND item_name = ?
+        ''', (updated_quantity, updated_average_price_before_tax if updated_quantity != 0 else 0, updated_average_price_after_tax if updated_quantity != 0 else 0, store, item_no, item_name))
+        conn.commit()
+
     def display_incoming_items(self):
+        def delete_selected_incoming_items_entry():
+            # Get the selected item's values
+            selected_item = tree_incoming_items.selection()
+            if not selected_item:
+                messagebox.showwarning(
+                    "No Selection", "Please select an entry to delete.")
+                return
+
+            selected_item_values = tree_incoming_items.item(
+                selected_item, 'values')
+            entry_date, store, item_no, item_name, quantity, unit_price, tax_rate = selected_item_values
+
+            # Get the inventory details for this item item's values
+            cursor.execute('''
+                SELECT total_quantity, average_price_before_tax, average_price_after_tax
+                FROM inventory
+                WHERE store = ? AND item_no = ? AND item_name = ?
+            ''', (store, item_no, item_name))
+
+            inventory_info = cursor.fetchone()
+            if inventory_info:
+                current_quantity = int(inventory_info[0])
+                if current_quantity < int(quantity):
+                    messagebox.showinfo(
+                        "Error", f"Selected entry cannot be deleted because some of them are already shipped. Remaining quantity in the inventory is {current_quantity}.")
+
+                else:
+                    # Delete the selected entry from the incoming_items table
+                    cursor.execute(f'''
+                        DELETE FROM incoming_items
+                        WHERE entry_date = ? AND store = ? AND item_no = ? AND item_name = ? AND quantity=? AND price =? AND tax_rate =?
+                    ''', (entry_date, store, item_no, item_name, quantity, unit_price, tax_rate))
+
+                    conn.commit()
+
+                    # Update the inventory table / DELETE or UPDATE
+                    if current_quantity == int(quantity):
+                        # Delete the selected item from the inventory
+                        cursor.execute('''
+                            DELETE FROM inventory
+                            WHERE store = ? AND item_no = ? AND item_name = ?
+                        ''', (store, item_no, item_name))
+                        conn.commit()
+                    else:
+                        # Update the selected item in the inventory
+                        tax_rate = float(tax_rate) / 100.0
+                        self.update_inventory_delete_incoming_entry(
+                            inventory_info, store, item_no, item_name, quantity, unit_price, tax_rate)
+
+                    # Refresh the display
+                    self.display_incoming_items()
+                    self.display_inventory()
+
+                    messagebox.showinfo(
+                        "Success", "Selected entry deleted successfully.")
+            else:
+                messagebox.showinfo(
+                    "Error", "Selected item is not in the inventory.")
+
         # Close existing window
         if self.incoming_items_window:
             self.incoming_items_window.destroy()
@@ -408,26 +504,29 @@ class InventoryApp:
         # Set the size of the window based on the screen dimensions
         screen_width = self.incoming_items_window.winfo_screenwidth()
         screen_height = self.incoming_items_window.winfo_screenheight()
-        window_width = int(screen_width * 0.8)
-        window_height = int(screen_height * 0.8)
+        window_width = int(screen_width * 0.9)
+        window_height = int(screen_height * 0.9)
         window_x = int((screen_width - window_width) / 2)
         window_y = int((screen_height - window_height) / 2)
 
         self.incoming_items_window.geometry(
             f"{window_width}x{window_height}+{window_x}+{window_y}")
-    
+
         tree_incoming_items = ttk.Treeview(self.incoming_items_window, columns=(
             "Date", "Store", "Item No", "Item Name", "Quantity", "Unit Price", "Tax Rate"))
 
         # Set column widths
-        tree_incoming_items.column("#1", width=150, anchor="w")  # Date
-        tree_incoming_items.column("#2", width=150, anchor="w")  # Store
-        tree_incoming_items.column("#3", width=150, anchor="w")  # Item No
-        tree_incoming_items.column("#4", width=150, anchor="w")  # Item Name
-        tree_incoming_items.column("#5", width=100, anchor="e")  # Quantity (right-justified with commas)
-        tree_incoming_items.column("#6", width=100, anchor="e")  # Unit Price
-        tree_incoming_items.column("#7", width=100, anchor="e")  # Tax Rate
+        tree_incoming_items.column("#0", width=20, anchor="w")  # #
+        tree_incoming_items.column("#1", width=130, anchor="w")  # Date
+        tree_incoming_items.column("#2", width=130, anchor="w")  # Store
+        tree_incoming_items.column("#3", width=130, anchor="w")  # Item No
+        tree_incoming_items.column("#4", width=130, anchor="w")  # Item Name
+        # Quantity (right-justified with commas)
+        tree_incoming_items.column("#5", width=130, anchor="e")
+        tree_incoming_items.column("#6", width=130, anchor="e")  # Unit Price
+        tree_incoming_items.column("#7", width=130, anchor="e")  # Tax Rate
 
+        tree_incoming_items.heading("#0", text="#")
         tree_incoming_items.heading("#1", text="Date")
         tree_incoming_items.heading("#2", text="Store")
         tree_incoming_items.heading("#3", text="Item No")
@@ -438,21 +537,73 @@ class InventoryApp:
 
         tree_incoming_items.grid(row=0, column=0, padx=10, pady=10)
 
+        # Add a button to delete the selected entry
+        btn_delete_entry = tk.Button(
+            self.incoming_items_window, text="Delete Selected Entry", command=delete_selected_incoming_items_entry)
+        btn_delete_entry.grid(row=1, column=0, padx=10, pady=10)
+
         # Display incoming items
         cursor.execute('''
             SELECT entry_date, store, item_no, item_name, quantity, price, tax_rate FROM incoming_items
         ''')
 
         result = cursor.fetchall()
-        for row in result:
-            formatted_row = list(row)
-            formatted_row[4] = self.format_quantity(row[4])  # Format the quantity value
-            formatted_row[5] = self.format_price(row[5]) # Format the unit price value
-            formatted_row[6] = self.format_price(row[6])  # Format the tax ratevalue
-            tree_incoming_items.insert("", "end", values=formatted_row)
+        for index, row in enumerate(result):
+            tree_incoming_items.insert("", "end", values=row)
 
+    def update_inventory_delete_outgoing_entry(self, inventory_info, store, item_no, item_name, quantity, unit_price, tax_rate):
+        new_quantity = str(-1 * int(quantity))
+        self.update_inventory_delete_incoming_entry(inventory_info, store, item_no, item_name, new_quantity, unit_price, tax_rate)
 
     def display_outgoing_shipments(self):
+        def delete_selected_outgoing_shipment_entry():
+            # Get the selected item's values
+            selected_item = tree_outgoing_shipments.selection()
+            if not selected_item:
+                messagebox.showwarning(
+                    "No Selection", "Please select an entry to delete.")
+                return
+
+            selected_item_values = tree_outgoing_shipments.item(
+                selected_item, 'values')
+            entry_date, destination, store, item_no, item_name, quantity, avg_price_before_tax, avg_price_after_tax = selected_item_values
+
+            # Get the inventory details for this item item's values
+            cursor.execute('''
+                SELECT total_quantity, average_price_before_tax, average_price_after_tax
+                FROM inventory
+                WHERE store = ? AND item_no = ? AND item_name = ?
+            ''', (store, item_no, item_name))
+
+            inventory_info = cursor.fetchone()
+            if inventory_info:
+                # Update the selected item in the inventory
+                tax_rate = float(avg_price_after_tax) / float(avg_price_before_tax) - 1.0
+                self.update_inventory_delete_outgoing_entry(
+                    inventory_info, store, item_no, item_name, quantity, avg_price_before_tax, tax_rate)
+            else:
+                # Insert new item
+                cursor.execute('''
+                    INSERT INTO inventory (store, item_no, item_name, total_quantity, average_price_before_tax, average_price_after_tax)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (store, item_no, item_name, quantity, avg_price_before_tax if quantity != 0 else 0, avg_price_after_tax if quantity != 0 else 0))
+                conn.commit()
+            
+            # Delete the selected entry from the incoming_items table
+            cursor.execute(f'''
+                DELETE FROM outgoing_shipments
+                WHERE entry_date = ? AND store = ? AND item_no = ? AND item_name = ? AND quantity=? AND average_price_at_shipment =? AND average_price_at_shipment_after_tax =? AND shipping_to=?
+            ''', (entry_date, store, item_no, item_name, quantity, avg_price_before_tax, avg_price_after_tax, destination))
+
+            conn.commit()
+                
+            # Refresh the display
+            self.display_outgoing_shipments()
+            self.display_inventory()
+
+            messagebox.showinfo(
+                "Success", "Selected entry deleted successfully.")
+            
         # Close existing window
         if self.outgoing_shipments_window:
             self.outgoing_shipments_window.destroy()
@@ -461,18 +612,32 @@ class InventoryApp:
         self.outgoing_shipments_window = tk.Toplevel(self.root)
         self.outgoing_shipments_window.title("Outgoing Shipments")
 
+        # Set the size of the window based on the screen dimensions
+        screen_width = self.outgoing_shipments_window.winfo_screenwidth()
+        screen_height = self.outgoing_shipments_window.winfo_screenheight()
+        window_width = int(screen_width * 0.9)
+        window_height = int(screen_height * 0.9)
+        window_x = int((screen_width - window_width) / 2)
+        window_y = int((screen_height - window_height) / 2)
+
+        self.outgoing_shipments_window.geometry(
+            f"{window_width}x{window_height}+{window_x}+{window_y}")
+
+        # Prepare outgoing shipment values
         tree_outgoing_shipments = ttk.Treeview(self.outgoing_shipments_window, columns=(
             "Date", "Shipping Destination", "Store", "Item No", "Item Name", "Quantity", "Average Price at Shipment", "Average Price at Shipment After Tax"))
 
-        tree_outgoing_shipments.column("#1", width=120, anchor="w")
-        tree_outgoing_shipments.column("#2", width=120, anchor="w")
-        tree_outgoing_shipments.column("#3", width=120, anchor="w")
-        tree_outgoing_shipments.column("#4", width=120, anchor="w")
-        tree_outgoing_shipments.column("#5", width=120, anchor="w")
-        tree_outgoing_shipments.column("#6", width=120, anchor="e")
-        tree_outgoing_shipments.column("#7", width=120, anchor="e")
-        tree_outgoing_shipments.column("#8", width=120, anchor="e")
+        tree_outgoing_shipments.column("#0", width=20, anchor="w")
+        tree_outgoing_shipments.column("#1", width=130, anchor="w")
+        tree_outgoing_shipments.column("#2", width=130, anchor="w")
+        tree_outgoing_shipments.column("#3", width=130, anchor="w")
+        tree_outgoing_shipments.column("#4", width=130, anchor="w")
+        tree_outgoing_shipments.column("#5", width=130, anchor="w")
+        tree_outgoing_shipments.column("#6", width=130, anchor="e")
+        tree_outgoing_shipments.column("#7", width=130, anchor="e")
+        tree_outgoing_shipments.column("#8", width=130, anchor="e")
 
+        tree_outgoing_shipments.heading("#0", text="#")
         tree_outgoing_shipments.heading("#1", text="Date")
         tree_outgoing_shipments.heading("#2", text="Shipping Destination")
         tree_outgoing_shipments.heading("#3", text="Store")
@@ -480,9 +645,15 @@ class InventoryApp:
         tree_outgoing_shipments.heading("#5", text="Item Name")
         tree_outgoing_shipments.heading("#6", text="Quantity")
         tree_outgoing_shipments.heading("#7", text="Average Price at Shipment")
-        tree_outgoing_shipments.heading("#8", text="Average Price at Shipment After Tax")
-        
+        tree_outgoing_shipments.heading(
+            "#8", text="Average Price at Shipment After Tax")
+
         tree_outgoing_shipments.grid(row=0, column=0, padx=10, pady=10)
+
+        # Add a button to delete the selected entry
+        btn_delete_entry = tk.Button(
+            self.outgoing_shipments_window, text="Delete Selected Shipment Entry", command=delete_selected_outgoing_shipment_entry)
+        btn_delete_entry.grid(row=1, column=0, padx=10, pady=10)
 
         # Display outgoing shipments
         cursor.execute('''
@@ -491,11 +662,7 @@ class InventoryApp:
             ''')
         result = cursor.fetchall()
         for row in result:
-            formatted_row = list(row)
-            formatted_row[5] = self.format_quantity(row[5])  # Format the quantity value
-            formatted_row[6] = self.format_price(row[6]) # Format the Average Price at Shipment
-            formatted_row[7] = self.format_price(row[7])  # Format Average Price at Shipment After Tax
-            tree_outgoing_shipments.insert("", "end", values=formatted_row)
+            tree_outgoing_shipments.insert("", "end", values=row)
 
     def create_reporting_tab(self):
         self.reporting_tab = ttk.Frame(self.tabControl)
