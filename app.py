@@ -390,13 +390,13 @@ class InventoryApp:
         tree_incoming_items = ttk.Treeview(self.incoming_items_window, columns=(
             "Date", "Store", "Item No", "Item Name", "Quantity", "Unit Price", "Tax Rate"))
 
-        tree_incoming_items.heading("#0", text="Date")
-        tree_incoming_items.heading("#1", text="Store")
-        tree_incoming_items.heading("#2", text="Item No")
-        tree_incoming_items.heading("#3", text="Item Name")
-        tree_incoming_items.heading("#4", text="Quantity")
-        tree_incoming_items.heading("#5", text="Unit Price")
-        tree_incoming_items.heading("#6", text="Tax Rate")
+        tree_incoming_items.heading("#1", text="Date")
+        tree_incoming_items.heading("#2", text="Store")
+        tree_incoming_items.heading("#3", text="Item No")
+        tree_incoming_items.heading("#4", text="Item Name")
+        tree_incoming_items.heading("#5", text="Quantity")
+        tree_incoming_items.heading("#6", text="Unit Price")
+        tree_incoming_items.heading("#7", text="Tax Rate")
 
         tree_incoming_items.grid(row=0, column=0, padx=10, pady=10)
 
@@ -404,6 +404,8 @@ class InventoryApp:
         cursor.execute('''
             SELECT entry_date, store, item_no, item_name, quantity, price, tax_rate FROM incoming_items
         ''')
+
+        
         result = cursor.fetchall()
         for row in result:
             tree_incoming_items.insert("", "end", values=row)
@@ -420,15 +422,15 @@ class InventoryApp:
         tree_outgoing_shipments = ttk.Treeview(self.outgoing_shipments_window, columns=(
             "Date", "Shipping Destination", "Store", "Item No", "Item Name", "Quantity", "Average Price at Shipment", "Average Price at Shipment After Tax"))
 
-        tree_outgoing_shipments.heading("#0", text="Date")
-        tree_outgoing_shipments.heading("#1", text="Shipping Destination")
-        tree_outgoing_shipments.heading("#2", text="Store")
-        tree_outgoing_shipments.heading("#3", text="Item No")
-        tree_outgoing_shipments.heading("#4", text="Item Name")
-        tree_outgoing_shipments.heading("#5", text="Quantity")
-        tree_outgoing_shipments.heading("#6", text="Average Price at Shipment")
+        tree_outgoing_shipments.heading("#1", text="Date")
+        tree_outgoing_shipments.heading("#2", text="Shipping Destination")
+        tree_outgoing_shipments.heading("#3", text="Store")
+        tree_outgoing_shipments.heading("#4", text="Item No")
+        tree_outgoing_shipments.heading("#5", text="Item Name")
+        tree_outgoing_shipments.heading("#6", text="Quantity")
+        tree_outgoing_shipments.heading("#7", text="Average Price at Shipment")
         tree_outgoing_shipments.heading(
-            "#7", text="Average Price at Shipment After Tax")
+            "#8", text="Average Price at Shipment After Tax")
 
         tree_outgoing_shipments.grid(row=0, column=0, padx=10, pady=10)
 
