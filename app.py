@@ -214,6 +214,15 @@ class InventoryApp:
     def create_inventory_tab(self):
         self.tree_inventory = ttk.Treeview(self.inventory_tab, columns=(
             "Store", "Item No", "Item Name", "Total Quantity", "Average Price", "Average Price After Tax"))
+        
+        
+        self.tree_inventory.column("#1", width=150, anchor="w") 
+        self.tree_inventory.column("#2", width=150, anchor="w") 
+        self.tree_inventory.column("#3", width=150, anchor="w") 
+        self.tree_inventory.column("#4", width=150, anchor="e") 
+        self.tree_inventory.column("#5", width=150, anchor="e") 
+        self.tree_inventory.column("#6", width=150, anchor="e") 
+        
         self.tree_inventory.heading("#1", text="Store")
         self.tree_inventory.heading("#2", text="Item No")
         self.tree_inventory.heading("#3", text="Item Name")
@@ -374,10 +383,19 @@ class InventoryApp:
             SELECT store, item_no, item_name, total_quantity, average_price_before_tax, average_price_after_tax FROM inventory
         ''')
         result = cursor.fetchall()
-        for index, row in enumerate(result):
-            self.tree_inventory.insert(
-                "", "end", id=index, values=row)
+        for row in result:
+            formatted_row = list(row)
+            formatted_row[3] = self.format_quantity(row[3])  # Format the quantity value
+            formatted_row[4] = self.format_price(row[4]) # Format the Average Price
+            formatted_row[5] = self.format_price(row[5])  # Format the Average Price After Tax
+            self.tree_inventory.insert("", "end", values=formatted_row)
 
+    def format_quantity(self, value):
+            return f"{value:,}"
+    
+    def format_price(self, value):
+            return "{:0,.2f}".format(value)
+    
     def display_incoming_items(self):
         # Close existing window
         if self.incoming_items_window:
@@ -387,8 +405,28 @@ class InventoryApp:
         self.incoming_items_window = tk.Toplevel(self.root)
         self.incoming_items_window.title("Incoming Items")
 
+        # Set the size of the window based on the screen dimensions
+        screen_width = self.incoming_items_window.winfo_screenwidth()
+        screen_height = self.incoming_items_window.winfo_screenheight()
+        window_width = int(screen_width * 0.8)
+        window_height = int(screen_height * 0.8)
+        window_x = int((screen_width - window_width) / 2)
+        window_y = int((screen_height - window_height) / 2)
+
+        self.incoming_items_window.geometry(
+            f"{window_width}x{window_height}+{window_x}+{window_y}")
+    
         tree_incoming_items = ttk.Treeview(self.incoming_items_window, columns=(
             "Date", "Store", "Item No", "Item Name", "Quantity", "Unit Price", "Tax Rate"))
+
+        # Set column widths
+        tree_incoming_items.column("#1", width=150, anchor="w")  # Date
+        tree_incoming_items.column("#2", width=150, anchor="w")  # Store
+        tree_incoming_items.column("#3", width=150, anchor="w")  # Item No
+        tree_incoming_items.column("#4", width=150, anchor="w")  # Item Name
+        tree_incoming_items.column("#5", width=100, anchor="e")  # Quantity (right-justified with commas)
+        tree_incoming_items.column("#6", width=100, anchor="e")  # Unit Price
+        tree_incoming_items.column("#7", width=100, anchor="e")  # Tax Rate
 
         tree_incoming_items.heading("#1", text="Date")
         tree_incoming_items.heading("#2", text="Store")
@@ -405,10 +443,14 @@ class InventoryApp:
             SELECT entry_date, store, item_no, item_name, quantity, price, tax_rate FROM incoming_items
         ''')
 
-        
         result = cursor.fetchall()
         for row in result:
-            tree_incoming_items.insert("", "end", values=row)
+            formatted_row = list(row)
+            formatted_row[4] = self.format_quantity(row[4])  # Format the quantity value
+            formatted_row[5] = self.format_price(row[5]) # Format the unit price value
+            formatted_row[6] = self.format_price(row[6])  # Format the tax ratevalue
+            tree_incoming_items.insert("", "end", values=formatted_row)
+
 
     def display_outgoing_shipments(self):
         # Close existing window
@@ -422,6 +464,15 @@ class InventoryApp:
         tree_outgoing_shipments = ttk.Treeview(self.outgoing_shipments_window, columns=(
             "Date", "Shipping Destination", "Store", "Item No", "Item Name", "Quantity", "Average Price at Shipment", "Average Price at Shipment After Tax"))
 
+        tree_outgoing_shipments.column("#1", width=120, anchor="w")
+        tree_outgoing_shipments.column("#2", width=120, anchor="w")
+        tree_outgoing_shipments.column("#3", width=120, anchor="w")
+        tree_outgoing_shipments.column("#4", width=120, anchor="w")
+        tree_outgoing_shipments.column("#5", width=120, anchor="w")
+        tree_outgoing_shipments.column("#6", width=120, anchor="e")
+        tree_outgoing_shipments.column("#7", width=120, anchor="e")
+        tree_outgoing_shipments.column("#8", width=120, anchor="e")
+
         tree_outgoing_shipments.heading("#1", text="Date")
         tree_outgoing_shipments.heading("#2", text="Shipping Destination")
         tree_outgoing_shipments.heading("#3", text="Store")
@@ -429,9 +480,8 @@ class InventoryApp:
         tree_outgoing_shipments.heading("#5", text="Item Name")
         tree_outgoing_shipments.heading("#6", text="Quantity")
         tree_outgoing_shipments.heading("#7", text="Average Price at Shipment")
-        tree_outgoing_shipments.heading(
-            "#8", text="Average Price at Shipment After Tax")
-
+        tree_outgoing_shipments.heading("#8", text="Average Price at Shipment After Tax")
+        
         tree_outgoing_shipments.grid(row=0, column=0, padx=10, pady=10)
 
         # Display outgoing shipments
@@ -441,7 +491,11 @@ class InventoryApp:
             ''')
         result = cursor.fetchall()
         for row in result:
-            tree_outgoing_shipments.insert("", "end", values=row)
+            formatted_row = list(row)
+            formatted_row[5] = self.format_quantity(row[5])  # Format the quantity value
+            formatted_row[6] = self.format_price(row[6]) # Format the Average Price at Shipment
+            formatted_row[7] = self.format_price(row[7])  # Format Average Price at Shipment After Tax
+            tree_outgoing_shipments.insert("", "end", values=formatted_row)
 
     def create_reporting_tab(self):
         self.reporting_tab = ttk.Frame(self.tabControl)
