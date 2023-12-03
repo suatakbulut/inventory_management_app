@@ -22,7 +22,6 @@ cursor.execute('''
     )
 ''')
 
-
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS outgoing_shipments (
         id INTEGER PRIMARY KEY,
@@ -37,6 +36,28 @@ cursor.execute('''
     )
 ''')
 
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS expense_entries (
+        id INTEGER PRIMARY KEY,
+        store TEXT,
+        item_name TEXT,
+        quantity INTEGER,
+        price REAL, 
+        tax_rate REAL, 
+        entry_date TEXT
+    )
+''')
+
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS expenses (
+        store TEXT,
+        item_name TEXT,
+        total_quantity INTEGER,
+        average_price_before_tax REAL,
+        average_price_after_tax REAL,
+        PRIMARY KEY (store, item_name)
+    )
+''')
 
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS inventory (
@@ -50,7 +71,6 @@ cursor.execute('''
     )
 ''')
 
-
 conn.commit()
 
 
@@ -63,14 +83,24 @@ class InventoryApp:
         self.tabControl = ttk.Notebook(root)
         self.incoming_tab = ttk.Frame(self.tabControl)
         self.outgoing_tab = ttk.Frame(self.tabControl)
+        self.new_expense_tab = ttk.Frame(self.tabControl)
         self.inventory_tab = ttk.Frame(self.tabControl)
+
+        # self.shipment_summary_tab = ttk.Frame(self.tabControl)
+        self.expense_summary_tab = ttk.Frame(self.tabControl)
 
         self.tabControl.add(self.incoming_tab, text="Incoming Items")
         self.tabControl.add(self.outgoing_tab, text="Outgoing Shipments")
-        self.tabControl.add(self.inventory_tab, text="Inventory")
+        self.tabControl.add(self.new_expense_tab, text="Expense Entry")
+        self.tabControl.add(self.inventory_tab, text="Inventory Summary")
+        # Shipment Summary Tab
+        self.create_reporting_tab()
+
+        self.tabControl.add(self.expense_summary_tab, text="Expense Summary")
         self.tabControl.pack(expand=1, fill="both")
 
         self.incoming_items_window = None
+        self.new_expense_window = None
         self.outgoing_shipments_window = None
 
         # Incoming Items Tab
@@ -79,11 +109,20 @@ class InventoryApp:
         # Outgoing Shipments Tab
         self.create_outgoing_tab()
 
+        # expense entry Tab
+        self.create_new_expense_tab()
+
         # Inventory Tab
         self.create_inventory_tab()
 
-        # reporting Tab
-        self.create_reporting_tab()
+        # Outgoing Shipment Summary Tab
+        # self.shipment_summary_tab()
+
+        # Expense Summary Tab
+        self.create_expense_summary_tab()
+
+    def calculate_after_tax_price(self, price_before_tax, tax_rate):
+        return price_before_tax + price_before_tax*tax_rate/100
 
     def clean_input(self, text):
         return text.strip().upper()
@@ -211,17 +250,72 @@ class InventoryApp:
             self.outgoing_tab, text="Display Outgoing Shipments", command=self.display_outgoing_shipments)
         btn_display_outgoing.grid(row=7, column=0, columnspan=2, pady=10)
 
+    def create_new_expense_tab(self):
+        # Store
+        label_store = tk.Label(self.new_expense_tab, text="Store:")
+        self.entry_store_new_expense = tk.Entry(self.new_expense_tab)
+        label_store.grid(row=0, column=0, padx=10, pady=10)
+        self.entry_store_new_expense.grid(row=0, column=1, padx=10, pady=10)
+
+        # Item name
+        label_item_name = tk.Label(self.new_expense_tab, text="Item Name:")
+        self.entry_item_name_new_expense = tk.Entry(self.new_expense_tab)
+        label_item_name.grid(row=1, column=0, padx=10, pady=10)
+        self.entry_item_name_new_expense.grid(
+            row=1, column=1, padx=10, pady=10)
+
+        # Quantity
+        label_quantity = tk.Label(self.new_expense_tab, text="Quantity:")
+        self.entry_quantity_new_expense = tk.Entry(self.new_expense_tab)
+        label_quantity.grid(row=2, column=0, padx=10, pady=10)
+        self.entry_quantity_new_expense.grid(row=2, column=1, padx=10, pady=10)
+
+        # Price
+        label_price = tk.Label(self.new_expense_tab, text="Price:")
+        self.entry_price_new_expense = tk.Entry(self.new_expense_tab)
+        label_price.grid(row=3, column=0, padx=10, pady=10)
+        self.entry_price_new_expense.grid(row=3, column=1, padx=10, pady=10)
+
+        # Tax rate
+        label_tax_rate = tk.Label(self.new_expense_tab, text="Tax Rate (%):")
+        self.entry_tax_rate_new_expense = tk.Entry(self.new_expense_tab)
+        label_tax_rate.grid(row=4, column=0, padx=10, pady=10)
+        self.entry_tax_rate_new_expense.grid(row=4, column=1, padx=10, pady=10)
+
+        # Entry Date
+        label_entry_date_new_expense = tk.Label(
+            self.new_expense_tab, text="Entry Date:")
+        self.entry_date_new_expense = tk.Entry(self.new_expense_tab)
+        label_entry_date_new_expense.grid(row=5, column=0, padx=10, pady=10)
+        self.entry_date_new_expense.grid(row=5, column=1, padx=10, pady=10)
+
+        # Set today's date as the default value
+        self.entry_date_new_expense.insert(
+            0, datetime.now().strftime("%m/%d/%Y"))
+
+        # Enter New Expense button
+        btn_enter_new_expense = tk.Button(
+            self.new_expense_tab, text="Enter New Expense", command=self.enter_new_expense)
+        btn_enter_new_expense.grid(row=6, column=0, columnspan=2, pady=10)
+
+        # Display Expenses button
+        btn_display_new_expense = tk.Button(
+            self.new_expense_tab, text="Display Expense Details", command=self.display_expense_details)
+        btn_display_new_expense.grid(row=7, column=0, columnspan=2, pady=10)
+
     def create_inventory_tab(self):
         self.tree_inventory = ttk.Treeview(self.inventory_tab, columns=(
             "Store", "Item No", "Item Name", "Total Quantity", "Average Price", "Average Price After Tax"))
 
-        self.tree_inventory.column("#1", width=150, anchor="w")
-        self.tree_inventory.column("#2", width=150, anchor="w")
-        self.tree_inventory.column("#3", width=150, anchor="w")
-        self.tree_inventory.column("#4", width=150, anchor="e")
-        self.tree_inventory.column("#5", width=150, anchor="e")
-        self.tree_inventory.column("#6", width=150, anchor="e")
+        self.tree_inventory.column("#0", width=30, anchor="w")
+        self.tree_inventory.column("#1", width=130, anchor="w")
+        self.tree_inventory.column("#2", width=130, anchor="w")
+        self.tree_inventory.column("#3", width=130, anchor="w")
+        self.tree_inventory.column("#4", width=130, anchor="e")
+        self.tree_inventory.column("#5", width=130, anchor="e")
+        self.tree_inventory.column("#6", width=130, anchor="e")
 
+        self.tree_inventory.heading("#0", text="#")
         self.tree_inventory.heading("#1", text="Store")
         self.tree_inventory.heading("#2", text="Item No")
         self.tree_inventory.heading("#3", text="Item Name")
@@ -234,6 +328,31 @@ class InventoryApp:
         btn_display_inventory = tk.Button(
             self.inventory_tab, text="Display Inventory", command=self.display_inventory)
         btn_display_inventory.grid(row=1, column=0, pady=10)
+
+    def create_expense_summary_tab(self):
+        self.tree_expense_summary_tab = ttk.Treeview(self.expense_summary_tab, columns=(
+            "Store", "Item Name", "Total Quantity",  "Average Price After Tax", "Total Cost"))
+
+        self.tree_expense_summary_tab.column("#0", width=10, anchor="w")
+        self.tree_expense_summary_tab.column("#1", width=150, anchor="w")
+        self.tree_expense_summary_tab.column("#2", width=150, anchor="w")
+        self.tree_expense_summary_tab.column("#3", width=150, anchor="e")
+        self.tree_expense_summary_tab.column("#4", width=150, anchor="e")
+        self.tree_expense_summary_tab.column("#5", width=150, anchor="e")
+
+        self.tree_expense_summary_tab.heading("#0", text="#")
+        self.tree_expense_summary_tab.heading("#1", text="Store")
+        self.tree_expense_summary_tab.heading("#2", text="Item Name")
+        self.tree_expense_summary_tab.heading("#3", text="Total Quantity")
+        self.tree_expense_summary_tab.heading(
+            "#4", text="Average Price After Tax")
+        self.tree_expense_summary_tab.heading("#5", text="Total Cost")
+
+        self.tree_expense_summary_tab.grid(row=0, column=0, padx=10, pady=10)
+
+        btn_display_expense_summary = tk.Button(
+            self.expense_summary_tab, text="Display Expenses", command=self.display_expense_summary)
+        btn_display_expense_summary.grid(row=1, column=0, pady=10)
 
     def enter_incoming_item(self):
         # Validate input
@@ -271,6 +390,71 @@ class InventoryApp:
         self.entry_quantity.delete(0, tk.END)
         self.entry_price.delete(0, tk.END)
         self.entry_tax_rate.delete(0, tk.END)
+
+    def enter_new_expense(self):
+        # Validate input
+        if not self.validate_input(self.entry_store_new_expense, self.entry_item_name_new_expense,  self.entry_quantity_new_expense, self.entry_price_new_expense, self.entry_tax_rate_new_expense):
+            return
+
+        store = self.clean_input(self.entry_store_new_expense.get())
+        item_name = self.clean_input(self.entry_item_name_new_expense.get())
+        quantity = int(self.clean_input(self.entry_quantity_new_expense.get()))
+        price = float(self.clean_input(self.entry_price_new_expense.get()))
+        tax_rate = float(self.clean_input(
+            self.entry_tax_rate_new_expense.get()))
+
+        # Get the entry date from the entry field or use today's date if not provided
+        entry_date_str = self.clean_input(self.entry_date_new_expense.get())
+        entry_date = datetime.strptime(
+            entry_date_str, "%m/%d/%Y").strftime("%Y-%m-%d %H:%M:%S") if entry_date_str else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.execute('''
+            INSERT INTO expense_entries (store,  item_name, quantity, price, tax_rate, entry_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (store, item_name, quantity, price, tax_rate, entry_date))
+        conn.commit()
+
+        self.update_expense_summary(
+            store, item_name, quantity, price, tax_rate)
+
+        # Display success message
+        messagebox.showinfo("Success", "New Expense entered successfully!")
+
+        # Clear entry fields
+        self.entry_store_new_expense.delete(0, tk.END)
+        self.entry_item_name_new_expense.delete(0, tk.END)
+        self.entry_quantity_new_expense.delete(0, tk.END)
+        self.entry_price_new_expense.delete(0, tk.END)
+        self.entry_tax_rate_new_expense.delete(0, tk.END)
+
+    def update_expense_summary(self, store, item_name, quantity, average_price_before_tax, tax_rate):
+        # Check if the item already exists in the inventory
+        cursor.execute(
+            'SELECT * FROM expenses WHERE store = ? AND item_name = ?', (store, item_name))
+        existing_item = cursor.fetchone()
+
+        average_price_after_tax = self.calculate_after_tax_price(
+            average_price_before_tax, tax_rate)
+        additional_total_cost = average_price_before_tax * quantity
+        additional_total_cost_after_tax = average_price_after_tax * quantity
+
+        if existing_item:
+            # Update existing item
+            cursor.execute('''
+                UPDATE expenses 
+                SET total_quantity = total_quantity + ?, 
+                    average_price_before_tax = (total_quantity * average_price_before_tax + ?) / (total_quantity + ?), 
+                    average_price_after_tax  = (total_quantity * average_price_after_tax + ?) / (total_quantity + ?) 
+                WHERE store = ? AND item_name = ?
+            ''', (quantity, additional_total_cost, quantity, additional_total_cost_after_tax, quantity, store, item_name))
+        else:
+            # Insert new item
+            cursor.execute('''
+                INSERT INTO expenses (store, item_name, total_quantity, average_price_before_tax, average_price_after_tax)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (store, item_name, quantity, average_price_before_tax if quantity != 0 else 0, average_price_after_tax if quantity != 0 else 0))
+
+        conn.commit()
 
     def enter_outgoing_shipment(self):
         # Validate input
@@ -372,6 +556,30 @@ class InventoryApp:
         # Refresh inventory display
         self.display_inventory()
 
+    def display_expense_summary(self):
+        # Clear previous data
+        for row in self.tree_expense_summary_tab.get_children():
+            self.tree_expense_summary_tab.delete(row)
+
+        # Display updated expenses
+        cursor.execute('''
+            SELECT 
+                store, 
+                item_name, 
+                total_quantity, 
+                average_price_before_tax, 
+                average_price_after_tax, 
+                average_price_after_tax*total_quantity AS total_cost 
+            FROM expenses
+        ''')
+        result = cursor.fetchall()
+        for index, row in enumerate(result):
+            formatted_row = list(row)
+            formatted_row[2] = self.format_quantity(row[2])
+            formatted_row[3] = self.format_price(row[3])
+            formatted_row[4] = self.format_price(row[4])
+            self.tree_expense_summary_tab.insert("", "end", text = str(index), values=formatted_row)
+
     def display_inventory(self):
         # Clear previous data
         for row in self.tree_inventory.get_children():
@@ -382,7 +590,7 @@ class InventoryApp:
             SELECT store, item_no, item_name, total_quantity, average_price_before_tax, average_price_after_tax FROM inventory
         ''')
         result = cursor.fetchall()
-        for row in result:
+        for index, row in enumerate(result):
             formatted_row = list(row)
             formatted_row[3] = self.format_quantity(
                 row[3])  # Format the quantity value
@@ -390,7 +598,7 @@ class InventoryApp:
                 row[4])  # Format the Average Price
             # Format the Average Price After Tax
             formatted_row[5] = self.format_price(row[5])
-            self.tree_inventory.insert("", "end", values=formatted_row)
+            self.tree_inventory.insert("", "end", text = str(index), values=formatted_row)
 
     def format_quantity(self, value):
         return f"{value:,}"
@@ -553,7 +761,8 @@ class InventoryApp:
 
     def update_inventory_delete_outgoing_entry(self, inventory_info, store, item_no, item_name, quantity, unit_price, tax_rate):
         new_quantity = str(-1 * int(quantity))
-        self.update_inventory_delete_incoming_entry(inventory_info, store, item_no, item_name, new_quantity, unit_price, tax_rate)
+        self.update_inventory_delete_incoming_entry(
+            inventory_info, store, item_no, item_name, new_quantity, unit_price, tax_rate)
 
     def display_outgoing_shipments(self):
         def delete_selected_outgoing_shipment_entry():
@@ -578,7 +787,8 @@ class InventoryApp:
             inventory_info = cursor.fetchone()
             if inventory_info:
                 # Update the selected item in the inventory
-                tax_rate = float(avg_price_after_tax) / float(avg_price_before_tax) - 1.0
+                tax_rate = float(avg_price_after_tax) / \
+                    float(avg_price_before_tax) - 1.0
                 self.update_inventory_delete_outgoing_entry(
                     inventory_info, store, item_no, item_name, quantity, avg_price_before_tax, tax_rate)
             else:
@@ -588,7 +798,7 @@ class InventoryApp:
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (store, item_no, item_name, quantity, avg_price_before_tax if quantity != 0 else 0, avg_price_after_tax if quantity != 0 else 0))
                 conn.commit()
-            
+
             # Delete the selected entry from the incoming_items table
             cursor.execute(f'''
                 DELETE FROM outgoing_shipments
@@ -596,14 +806,14 @@ class InventoryApp:
             ''', (entry_date, store, item_no, item_name, quantity, avg_price_before_tax, avg_price_after_tax, destination))
 
             conn.commit()
-                
+
             # Refresh the display
             self.display_outgoing_shipments()
             self.display_inventory()
 
             messagebox.showinfo(
                 "Success", "Selected entry deleted successfully.")
-            
+
         # Close existing window
         if self.outgoing_shipments_window:
             self.outgoing_shipments_window.destroy()
@@ -664,9 +874,71 @@ class InventoryApp:
         for row in result:
             tree_outgoing_shipments.insert("", "end", values=row)
 
+    def display_expense_details(self):
+        def delete_selected_expense_entry():
+            pass
+
+        # Close existing window
+        if self.new_expense_window:
+            self.new_expense_window.destroy()
+
+        # Create a new window for displaying expense details
+        self.new_expense_window = tk.Toplevel(self.root)
+        self.new_expense_window.title("Expense Details")
+
+        # Set the size of the window based on the screen dimensions
+        screen_width = self.new_expense_window.winfo_screenwidth()
+        screen_height = self.new_expense_window.winfo_screenheight()
+        window_width = int(screen_width * 0.9)
+        window_height = int(screen_height * 0.9)
+        window_x = int((screen_width - window_width) / 2)
+        window_y = int((screen_height - window_height) / 2)
+
+        self.new_expense_window.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
+
+        # Prepare expense entry values
+        tree_expense_details = ttk.Treeview(self.new_expense_window, height=25, columns=(
+            "Date", "Store", "Item Name", "Quantity", "Unite Price", "Tax Rate"))
+
+        tree_expense_details.column("#0", width=40, anchor="w", stretch=tk.YES)
+        tree_expense_details.column("#1", width=130, anchor="w", stretch=tk.YES)
+        tree_expense_details.column("#2", width=130, anchor="w", stretch=tk.YES)
+        tree_expense_details.column("#3", width=130, anchor="w", stretch=tk.YES)
+        tree_expense_details.column("#4", width=130, anchor="w", stretch=tk.YES)
+        tree_expense_details.column("#5", width=130, anchor="w", stretch=tk.YES)
+        tree_expense_details.column("#6", width=130, anchor="e", stretch=tk.YES)
+
+        tree_expense_details.heading("#0", text="#")
+        tree_expense_details.heading("#1", text="Date")
+        tree_expense_details.heading("#2", text="Store")
+        tree_expense_details.heading("#3", text="Item Name")
+        tree_expense_details.heading("#4", text="Quantity")
+        tree_expense_details.heading("#5", text="Unite Price")
+        tree_expense_details.heading("#6", text="Tax Rate")
+        tree_expense_details.pack(fill=tk.Y)
+
+        tree_expense_details.grid(row=0, column=0, padx=10, pady=10)
+        
+
+        # Add a button to delete the selected entry
+        btn_delete_entry = tk.Button(
+            self.new_expense_window, text="Delete Selected Expense Entry", command=delete_selected_expense_entry)
+        btn_delete_entry.grid(row=1, column=0, padx=50, pady=50)
+        
+        
+
+        # Display expense details
+        cursor.execute('''
+            SELECT entry_date, store,  item_name, quantity, price, tax_Rate
+            FROM expense_entries 
+            ''')
+        result = cursor.fetchall()
+        for index, row in enumerate(result):
+            tree_expense_details.insert("", "end", text = str(index), values=row)
+
     def create_reporting_tab(self):
         self.reporting_tab = ttk.Frame(self.tabControl)
-        self.tabControl.add(self.reporting_tab, text="Reporting")
+        self.tabControl.add(self.reporting_tab, text="Shipment Summary")
 
         # Dropdown for Shipping Personnel
         self.shipping_to_var_report = StringVar(self.reporting_tab)
